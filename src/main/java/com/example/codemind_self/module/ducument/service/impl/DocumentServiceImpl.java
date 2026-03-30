@@ -6,6 +6,7 @@ import com.example.codemind_self.common.constant.MqConstant;
 import com.example.codemind_self.common.exception.BusinessException;
 import com.example.codemind_self.common.result.ResultCode;
 import com.example.codemind_self.infrastructure.minio.MinioService;
+import com.example.codemind_self.infrastructure.redis.RedisService;
 import com.example.codemind_self.module.ducument.entity.Document;
 import com.example.codemind_self.module.ducument.entity.DocumentStatusEnum;
 import com.example.codemind_self.module.ducument.entity.DocumentVO;
@@ -32,6 +33,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentMapper documentMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final RocketMQTemplate rocketMQTemplate;
+    private final RedisService redisService;
 
     private static final List<String> ALLOWED_SUFFIX = Arrays.asList(
             // 主流语言
@@ -45,39 +47,54 @@ public class DocumentServiceImpl implements DocumentService {
             ".md", ".txt"
     );
 
+
     @Override
     public DocumentVO upload(Long kbId, MultipartFile file) {
         Long userId = StpUtil.getLoginIdAsLong();
-        if(knowledgeBaseMapper.selectById(kbId) == null){
-            throw new BusinessException(ResultCode.NOT_FOUND);
-        }
         String originalFilename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
-        String suffix = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase() : "";
-        if(!ALLOWED_SUFFIX.contains(suffix)){
-            throw new BusinessException("不支持的文件类型，支持：" + ALLOWED_SUFFIX);
+
+        String lockKey = "upload_lock:" + userId + ":" + originalFilename;
+
+        if(!redisService.tryLock(lockKey,10)){
+            throw new BusinessException("文件上传中，请勿重复提交");
         }
 
-        String objectName = minioService.upload(file);
+        try {
 
-        Document doc = new Document();
-        doc.setKbId(kbId);
-        doc.setUserId(userId);
-        doc.setFileName(file.getOriginalFilename());
-        doc.setFileUrl(objectName);
-        doc.setFileSize(file.getSize());
-        doc.setStatus(DocumentStatusEnum.PARSING.getCode());
-        doc.setChunkCount(0);
+            if (knowledgeBaseMapper.selectById(kbId) == null) {
+                throw new BusinessException(ResultCode.NOT_FOUND);
+            }
 
-        documentMapper.insert(doc);
+            String suffix = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase() : "";
+            if (!ALLOWED_SUFFIX.contains(suffix)) {
+                throw new BusinessException("不支持的文件类型，支持：" + ALLOWED_SUFFIX);
+            }
 
-        DocumentParseMessage parseMessage = new DocumentParseMessage();
-        parseMessage.setDocumentId(doc.getId());
-        parseMessage.setKbId(kbId);
-        parseMessage.setObjectName(objectName);
-        parseMessage.setUserId(userId);
-        rocketMQTemplate.convertAndSend(MqConstant.DOCUMENT_TOPIC,parseMessage);
-        log.info("文档解析消息已发送，document：{}",doc.getId());
-        return convertToVO(doc);
+            String objectName = minioService.upload(file);
+
+            Document doc = new Document();
+            doc.setKbId(kbId);
+            doc.setUserId(userId);
+            doc.setFileName(file.getOriginalFilename());
+            doc.setFileUrl(objectName);
+            doc.setFileSize(file.getSize());
+            doc.setStatus(DocumentStatusEnum.PARSING.getCode());
+            doc.setChunkCount(0);
+
+            documentMapper.insert(doc);
+
+            DocumentParseMessage parseMessage = new DocumentParseMessage();
+            parseMessage.setDocumentId(doc.getId());
+            parseMessage.setKbId(kbId);
+            parseMessage.setObjectName(objectName);
+            parseMessage.setUserId(userId);
+            rocketMQTemplate.convertAndSend(MqConstant.DOCUMENT_TOPIC, parseMessage);
+            log.info("文档解析消息已发送，document：{}", doc.getId());
+            return convertToVO(doc);
+        }finally {
+            redisService.unLock(lockKey);
+
+        }
 
     }
 

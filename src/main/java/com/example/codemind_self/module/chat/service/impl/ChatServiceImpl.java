@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.codemind_self.common.constant.RedisConstant;
 import com.example.codemind_self.common.exception.BusinessException;
 import com.example.codemind_self.infrastructure.ai.RagService;
+import com.example.codemind_self.infrastructure.redis.CacheService;
 import com.example.codemind_self.infrastructure.redis.RedisService;
 import com.example.codemind_self.module.chat.entity.*;
 import com.example.codemind_self.module.chat.mapper.ChatMessageMapper;
@@ -26,6 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -33,10 +36,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
 
-    private final RedisService redisService;
     private final ConversationMapper conversationMapper;
     private final ChatMessageMapper chatMessageMapper;
     private final RagService ragService;
+    private final RedisService redisService;
+    private final CacheService cacheService;
     private final OpenAiStreamingChatModel streamingChatModel;
 
     @Override
@@ -49,9 +53,13 @@ public class ChatServiceImpl implements ChatService {
          }
 
          String cacheKey = RedisConstant.CHAT_CACHE_PREFIX + dto.getKbId() + ":" + dto.getQuestion().hashCode();
-         String cached = redisService.get(cacheKey);
 
          SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
+
+         String cached = cacheService.getWithLock(cacheKey,
+                 RedisConstant.randomTtl(RedisConstant.CHAT_CACHE_TTL),
+                 () -> null
+         );
 
          Conversation conv = getOrCreateConversation(dto,userId);
 
@@ -103,6 +111,7 @@ public class ChatServiceImpl implements ChatService {
                              String answer = fullResponse.toString();
                              saveMessage(conv.getId(), "assistant", answer, 0);
                              redisService.set(cacheKey, answer, RedisConstant.CHAT_CACHE_TTL);
+                             cacheService.putLocal(cacheKey,answer);
                          }catch (IOException e){
                              emitter.completeWithError(e);
                          }
@@ -131,25 +140,28 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public List<ChatMessageVO> listMessages(Long convId, Long userId) {
         String contextKey = RedisConstant.CHAT_CONTEXT_PREFIX + convId;
-        String cached = redisService.get(contextKey);
+        String cached = cacheService.getWithMutiLevel(contextKey,
+                RedisConstant.CHAT_CONTEXT_TTL,
+                ()->{
+                    LambdaQueryWrapper<ChatMessage> wrapper = new LambdaQueryWrapper<>();
+                    wrapper.eq(ChatMessage::getConvId,convId)
+                            .orderByDesc(ChatMessage::getCreateTime);
+                    List<ChatMessage> list = chatMessageMapper.selectList(wrapper);
+                    List<ChatMessageVO> volist = list.stream().map(conv ->{
+                        ChatMessageVO vo = new ChatMessageVO();
+                        BeanUtils.copyProperties(conv,vo);
+                        return vo;
+                    }).toList();
+                    return JSONUtil.toJsonStr(volist);
+                }
 
-        if(cached != null){
-            return JSONUtil.toList(cached,ChatMessageVO.class);
+        );
+
+        if(cached == null){
+            return Collections.emptyList();
         }
 
-        LambdaQueryWrapper<ChatMessage> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(ChatMessage::getConvId,convId)
-                .orderByDesc(ChatMessage::getCreateTime);
-        List<ChatMessage> list = chatMessageMapper.selectList(wrapper);
-
-        redisService.set(contextKey,JSONUtil.toJsonStr(list), RedisConstant.CHAT_CACHE_TTL);
-
-        return list.stream().map(conv ->{
-            ChatMessageVO vo = new ChatMessageVO();
-            BeanUtils.copyProperties(conv,vo);
-            return vo;
-        }).toList();
-
+        return JSONUtil.toList(cached,ChatMessageVO.class);
     }
 
     private Conversation getOrCreateConversation(ChatRequestDTO dto,Long userId){
@@ -177,8 +189,9 @@ public class ChatServiceImpl implements ChatService {
         msg.setTokens(tokens);
         msg.setConvId(convId);
         chatMessageMapper.insert(msg);
-        redisService.delete(RedisConstant.CHAT_CONTEXT_PREFIX + convId);
 
+        // 删除两级缓存
+        cacheService.evict(RedisConstant.CHAT_CONTEXT_PREFIX + convId);
     }
 
     private String buildPrompt(String question, List<String> chunks){

@@ -3,6 +3,7 @@ package com.example.codemind_self.infrastructure.redis;
 
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -17,8 +18,9 @@ import java.util.concurrent.TimeUnit;
 public class RedisService {
 
     private final StringRedisTemplate restTemplate;
+    private final RedisTemplate<Object, Object> redisTemplate;
 
-    public void set(String key,String value,int ttlSeconds){
+    public void set(String key,String value,long ttlSeconds){
         restTemplate.opsForValue().set(key,value, ttlSeconds,TimeUnit.SECONDS);
     }
 
@@ -41,4 +43,13 @@ public class RedisService {
         }
         return count > maxCount;
     }
+
+    public boolean tryLock(String key, long expireSeconds){
+        return Boolean.TRUE.equals(restTemplate.opsForValue().setIfAbsent(key,"1",expireSeconds,TimeUnit.SECONDS));
+    }
+
+    public void unLock(String key){
+        redisTemplate.delete(key);
+    }
+
 }

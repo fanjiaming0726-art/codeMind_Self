@@ -1,5 +1,7 @@
 package com.example.codemind_self.common.constant;
 
+import java.util.Random;
+
 public class RedisConstant {
 
     /***
@@ -19,7 +21,16 @@ public class RedisConstant {
     public static final String CHAT_CACHE_PREFIX = "chat_cache";
     public static final int CHAT_CACHE_TTL = 86400;
 
-    private RedisConstant(){
+    private RedisConstant(){}
 
+    // 解决缓存雪崩问题，TTL随机偏移范围
+    public static final int TTL_RANDOM_RANGE = 3600;
+
+    // 缓存穿透：空值缓存时间
+    public static final int NULL_CACHE_TTL = 60;
+
+    // 生成带随机偏移的TTL
+    public static int randomTtl(int baseTtl){
+        return baseTtl + new Random().nextInt(TTL_RANDOM_RANGE);
     }
 }
