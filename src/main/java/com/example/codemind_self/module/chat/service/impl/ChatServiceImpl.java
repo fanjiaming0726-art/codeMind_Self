@@ -178,6 +178,7 @@ public class ChatServiceImpl implements ChatService {
         String title = dto.getQuestion().length() > 20 ? dto.getQuestion().substring(0,20) + "..." : dto.getQuestion();
         conv.setTitle(title);
 
+        cacheService.addToBloom(RedisConstant.CHAT_CONTEXT_PREFIX + conv.getId());
         conversationMapper.insert(conv);
         return conv;
     }
@@ -190,8 +191,10 @@ public class ChatServiceImpl implements ChatService {
         msg.setConvId(convId);
         chatMessageMapper.insert(msg);
 
+        String contextKey = RedisConstant.CHAT_CONTEXT_PREFIX + convId;
         // 删除两级缓存
-        cacheService.evict(RedisConstant.CHAT_CONTEXT_PREFIX + convId);
+        cacheService.evict(contextKey);
+        cacheService.addToBloom(contextKey);
     }
 
     private String buildPrompt(String question, List<String> chunks){

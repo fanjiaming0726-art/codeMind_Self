@@ -2,8 +2,11 @@ package com.example.codemind_self.infrastructure.redis;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 
 
@@ -16,13 +19,39 @@ import java.util.function.Supplier;
 public class CacheService {
 
     private final RedisService redisService;
+    private final RedissonClient redissonClient;
+
 
     private final Cache<String,String> localCache = Caffeine.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(5, TimeUnit.MINUTES)
             .build();
 
+    private  RBloomFilter<String> bloomFilter;
+
+
+    @PostConstruct
+    private void initBloomFilter(){
+        bloomFilter = redissonClient.getBloomFilter("codemind:bloom");
+        bloomFilter.tryInit(100000,0.01);
+    }
+
+    public void addToBloom(String key){
+        bloomFilter.add(key);
+    }
+
+    // 判断key是否可能存在
+    public boolean mightExist(String key) {
+        return bloomFilter.contains(key);
+    }
+
+
     public String getWithMutiLevel(String key, long redisTtl, Supplier<String> dbLoader ){
+        if(!bloomFilter.contains(key)){
+            log.debug("布隆过滤器拦截,key不存在：{}",key);
+            return null;
+        }
+
         String value = localCache.getIfPresent(key);
 
         if(value != null){
