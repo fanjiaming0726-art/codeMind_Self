@@ -2,13 +2,17 @@ package com.example.codemind_self.module.knowledge.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.codemind_self.common.exception.BusinessException;
+import com.example.codemind_self.common.result.PageRequest;
 import com.example.codemind_self.common.result.ResultCode;
 import com.example.codemind_self.module.knowledge.entity.KnowledgeBase;
 import com.example.codemind_self.module.knowledge.entity.KnowledgeBaseDTO;
 import com.example.codemind_self.module.knowledge.entity.KnowledgeBaseVO;
 import com.example.codemind_self.module.knowledge.mapper.KnowledgeBaseMapper;
 import com.example.codemind_self.module.knowledge.service.KnowledgeBaseService;
+import dev.langchain4j.agent.tool.P;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -64,19 +68,19 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     @Override
-    public List<KnowledgeBaseVO> listMine() {
+    public IPage<KnowledgeBaseVO> listMine(PageRequest pageRequest) {
         Long userId = StpUtil.getLoginIdAsLong();
+        Page<KnowledgeBase> page = new Page<>(pageRequest.getPageNum(),pageRequest.getPageSize());
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(KnowledgeBase::getUserId,userId)
                 .orderByDesc(KnowledgeBase::getCreateTime);
-        List<KnowledgeBase> baseList = knowledgeBaseMapper.selectList(wrapper);
+        Page<KnowledgeBase> basePage = knowledgeBaseMapper.selectPage(page,wrapper);
 
-        List<KnowledgeBaseVO> voList = baseList.stream().map(base ->{
+        return basePage.convert(base ->{
                     KnowledgeBaseVO vo = new KnowledgeBaseVO();
                     BeanUtils.copyProperties(base,vo);
                     return vo;
-                }).toList();
-        return voList;
+                });
     }
 
     // 针对知识库这种私密数据，需要校验权限

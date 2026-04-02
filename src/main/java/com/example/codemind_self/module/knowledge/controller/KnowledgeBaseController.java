@@ -2,6 +2,8 @@ package com.example.codemind_self.module.knowledge.controller;
 
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.example.codemind_self.common.result.PageRequest;
 import com.example.codemind_self.common.result.Result;
 import com.example.codemind_self.module.knowledge.entity.KnowledgeBaseDTO;
 import com.example.codemind_self.module.knowledge.entity.KnowledgeBaseVO;
@@ -26,8 +28,8 @@ public class KnowledgeBaseController {
     }
 
     @GetMapping
-    public Result<List<KnowledgeBaseVO>> listMine(){
-        return Result.success(knowledgeBaseService.listMine());
+    public Result<IPage<KnowledgeBaseVO>> listMine(PageRequest pageRequest){
+        return Result.success(knowledgeBaseService.listMine(pageRequest));
     }
 
 

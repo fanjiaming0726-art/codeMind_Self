@@ -81,7 +81,9 @@ public class CodeReviewServiceImpl implements CodeReviewService {
     public List<CodeReviewVO> litMine() {
         Long userId = StpUtil.getLoginIdAsLong();
         LambdaQueryWrapper<CodeReview> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(CodeReview::getUserId, userId)
+        // 指定不返回字段
+        wrapper.select(CodeReview::getId,CodeReview::getFileName,CodeReview::getIssuesCount,CodeReview::getCreateTime)
+                .eq(CodeReview::getUserId, userId)
                 .orderByDesc(CodeReview::getCreateTime);
         List<CodeReview> list = codeReviewMapper.selectList(wrapper);
         return list.stream().map(this::convertToVO).toList();

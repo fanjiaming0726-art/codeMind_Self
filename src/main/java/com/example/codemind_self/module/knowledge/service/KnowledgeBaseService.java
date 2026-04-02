@@ -1,6 +1,8 @@
 package com.example.codemind_self.module.knowledge.service;
 
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.example.codemind_self.common.result.PageRequest;
 import com.example.codemind_self.module.knowledge.entity.KnowledgeBaseDTO;
 import com.example.codemind_self.module.knowledge.entity.KnowledgeBaseVO;
 
@@ -16,6 +18,6 @@ public interface KnowledgeBaseService {
 
     KnowledgeBaseVO getById(Long id);
 
-    List<KnowledgeBaseVO> listMine();
+    IPage<KnowledgeBaseVO> listMine(PageRequest pageRequest);
 
 }

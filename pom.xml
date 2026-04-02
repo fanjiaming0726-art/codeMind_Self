@@ -68,11 +68,17 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- MyBatis-Plus -->
+        <!-- MyBatis-Plus + Interceptor-->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
             <version>${mybatis-plus-spring-boot3-starter.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>3.5.15</version>
         </dependency>
 
         <!-- 专门做权限认证的 -->
