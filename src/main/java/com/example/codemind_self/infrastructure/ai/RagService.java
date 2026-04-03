@@ -6,6 +6,7 @@ import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
+import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
 import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +47,7 @@ public class RagService {
      * @return
      */
 
-    public List<String> search(String query, int maxResults){
+    public List<String> search(String query, int maxResults,Long kbId){
 
         Embedding queryEmbedding = embeddingModel.embed(query).content();
         EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
@@ -54,6 +55,7 @@ public class RagService {
                 .maxResults(maxResults)
 
                 .minScore(0.6)
+                .filter(MetadataFilterBuilder.metadataKey("kbId").isEqualTo(String.valueOf(kbId)))
                 .build();
         List<EmbeddingMatch<TextSegment>> ansList = milvusEmbeddingStore.search(request).matches();
 

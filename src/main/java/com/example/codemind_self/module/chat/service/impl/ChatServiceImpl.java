@@ -76,7 +76,7 @@ public class ChatServiceImpl implements ChatService {
              return emitter;
 
          }
-         List<String> relevantChunks = ragService.search(dto.getQuestion(),5);
+         List<String> relevantChunks = ragService.search(dto.getQuestion(),5,dto.getKbId());
 
          String prompt = buildPrompt(dto.getQuestion(),relevantChunks);
 
